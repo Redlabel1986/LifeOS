@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd ../.. && pnpm run codegen && cd apps/api && pnpm run build",
-  "installCommand": "cd ../.. && pnpm install --frozen-lockfile --prod=false",
+  "installCommand": "cd ../.. && npm i -g pnpm@9.5.0 && pnpm install --frozen-lockfile --prod=false",
+  "buildCommand": "cd ../.. && pnpm run build --filter=@lifeos/api",
   "framework": null,
   "rewrites": [
     { "source": "/graphql", "destination": "/api" },

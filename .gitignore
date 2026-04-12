@@ -9,10 +9,10 @@ dist/
 .turbo/
 *.tsbuildinfo
 
-# Generated code
-**/src/generated/
-packages/graphql-schema/src/generated/
-packages/db/src/generated/
+# Generated code — committed for deployment (Vercel can't run codegen)
+# **/src/generated/
+# packages/graphql-schema/src/generated/
+# packages/db/src/generated/
 
 # Environment
 .env
@@ -43,3 +43,7 @@ redis.zip
 
 # Test
 coverage/
+# Generated — committed for Vercel deploy
+packages/db/src/generated/client/query_engine-*
+packages/db/src/generated/client/*.tmp*
+dump.rdb

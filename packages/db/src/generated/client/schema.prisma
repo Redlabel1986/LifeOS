@@ -1,0 +1,575 @@
+// ============================================================================
+// LifeOS — Database Schema
+// Package: @lifeos/db
+// Engine:  PostgreSQL
+// ----------------------------------------------------------------------------
+// Rules:
+//   * Money is stored as BigInt minor units (e.g. cents) + ISO 4217 currency.
+//   * All user-owned tables have `userId` + an index on it.
+//   * i18n strings on reference data live in `translations jsonb`.
+//   * Timestamps are UTC (`timestamptz`); formatting happens in the client.
+//   * Cascade only on ownership; soft refs use SetNull.
+// ============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/client"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum Locale {
+  de
+  en
+  fr
+  ar
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionSource {
+  MANUAL
+  DOCUMENT
+  EMAIL
+  BANK_IMPORT
+  AI_SUGGESTED
+}
+
+enum BillingCycle {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUAL
+  ANNUAL
+  CUSTOM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum DocumentType {
+  RECEIPT
+  INVOICE
+  CONTRACT
+  LETTER
+  TAX_DOCUMENT
+  PAYSLIP
+  OTHER
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum ReminderChannel {
+  EMAIL
+  PUSH
+  IN_APP
+}
+
+enum BankConnectionProvider {
+  GOCARDLESS
+  CAMT_FILE
+}
+
+enum BankConnectionStatus {
+  PENDING_CONSENT
+  ACTIVE
+  EXPIRED
+  REVOKED
+  ERROR
+}
+
+enum TaxClass {
+  CLASS_1
+  CLASS_2
+  CLASS_3
+  CLASS_4
+  CLASS_5
+  CLASS_6
+}
+
+// ============================================================================
+// Users & Auth
+// ============================================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  displayName   String?
+  locale        Locale   @default(de)
+  currency      String   @default("EUR") // ISO 4217 base currency
+  timezone      String   @default("Europe/Berlin")
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions        Session[]
+  categories      Category[]
+  transactions    Transaction[]
+  subscriptions   Subscription[]
+  documents       Document[]
+  budgets         Budget[]
+  bankConnections BankConnection[]
+  taxProfile      TaxProfile?
+  merchantLinks   UserMerchant[]
+  aiConversations AiConversation[]
+
+  @@index([email])
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ============================================================================
+// Categories (i18n via translations jsonb)
+// ============================================================================
+
+model Category {
+  id            String       @id @default(cuid())
+  userId        String? // null + isSystem=true => global category
+  parentId      String?
+  kind          CategoryKind
+  slug          String // stable machine key, e.g. "groceries"
+  translations  Json // { de: "Lebensmittel", en: "Groceries", fr: "Alimentation", ar: "بقالة" }
+  icon          String?
+  color         String? // hex
+  taxDeductible Boolean      @default(false)
+  taxCode       String? // DE tax category code (e.g. "WERBUNGSKOSTEN")
+  isSystem      Boolean      @default(false)
+  sortOrder     Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  user          User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent        Category?      @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children      Category[]     @relation("CategoryChildren")
+  transactions  Transaction[]
+  budgets       Budget[]
+  subscriptions Subscription[]
+  userMerchants UserMerchant[]
+
+  @@unique([userId, slug])
+  @@index([userId])
+  @@index([parentId])
+  @@index([isSystem])
+}
+
+// ============================================================================
+// Merchants (global lookup + per-user override)
+// ============================================================================
+
+model Merchant {
+  id                  String   @id @default(cuid())
+  name                String   @unique // normalized key, e.g. "rewe"
+  displayName         String
+  website             String?
+  logoUrl             String?
+  patterns            String[] // regex patterns matched against OCR/statement text
+  defaultCategorySlug String?
+  countryCode         String? // ISO 3166-1 alpha-2
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  userLinks     UserMerchant[]
+  transactions  Transaction[]
+  subscriptions Subscription[]
+
+  @@index([name])
+}
+
+model UserMerchant {
+  userId      String
+  merchantId  String
+  customName  String?
+  categoryId  String?
+  firstSeenAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchant Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@id([userId, merchantId])
+  @@index([merchantId])
+  @@index([categoryId])
+}
+
+// ============================================================================
+// Transactions
+// ============================================================================
+
+model Transaction {
+  id             String  @id @default(cuid())
+  userId         String
+  categoryId     String?
+  merchantId     String?
+  subscriptionId String?
+  documentId     String?
+
+  type   TransactionType
+  source TransactionSource @default(MANUAL)
+
+  // Money in minor units (e.g. cents). Always positive — `type` encodes direction.
+  amountMinor  BigInt
+  currency     String // ISO 4217
+  exchangeRate Decimal? @db.Decimal(18, 8) // to user's base currency; null if same
+
+  occurredAt DateTime // real-world date of the transaction
+  bookedAt   DateTime? // when it posted to the account (bank import)
+
+  description   String?
+  note          String?
+  tags          String[] @default([])
+  taxDeductible Boolean  @default(false)
+
+  // AI/OCR metadata
+  aiConfidence Float? // 0..1 auto-categorization confidence
+  needsReview  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category        Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  merchant        Merchant?        @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  subscription    Subscription?    @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  document        Document?        @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  bankTransaction BankTransaction? @relation("BankTxToLifeosTx")
+
+  @@index([userId, occurredAt])
+  @@index([userId, type, occurredAt])
+  @@index([userId, categoryId])
+  @@index([userId, merchantId])
+  @@index([subscriptionId])
+  @@index([documentId])
+  @@index([needsReview])
+}
+
+// ============================================================================
+// Subscriptions & Contracts
+// ============================================================================
+
+model Subscription {
+  id         String  @id @default(cuid())
+  userId     String
+  merchantId String?
+  categoryId String?
+
+  name        String
+  description String?
+  status      SubscriptionStatus @default(ACTIVE)
+
+  amountMinor     BigInt
+  currency        String
+  billingCycle    BillingCycle
+  customCycleDays Int? // used when billingCycle = CUSTOM
+
+  startedAt            DateTime
+  nextRenewalAt        DateTime?
+  cancellationDeadline DateTime?
+  cancelledAt          DateTime?
+
+  cancellationUrl String?
+  contactEmail    String?
+  contractFileId  String? // optional link to a Document
+
+  autoDetected        Boolean @default(false)
+  detectionConfidence Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchant     Merchant?              @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  category     Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+  reminders    SubscriptionReminder[]
+
+  @@index([userId, status])
+  @@index([userId, nextRenewalAt])
+  @@index([merchantId])
+}
+
+model SubscriptionReminder {
+  id             String          @id @default(cuid())
+  subscriptionId String
+  remindAt       DateTime
+  sentAt         DateTime?
+  channel        ReminderChannel @default(EMAIL)
+  createdAt      DateTime        @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([remindAt, sentAt])
+  @@index([subscriptionId])
+}
+
+// ============================================================================
+// Documents (receipts, invoices, contracts, letters, tax docs)
+// ============================================================================
+
+model Document {
+  id     String         @id @default(cuid())
+  userId String
+  type   DocumentType   @default(OTHER)
+  status DocumentStatus @default(UPLOADED)
+
+  // Storage (S3-compatible)
+  storageKey     String  @unique
+  storageBucket  String
+  mimeType       String
+  sizeBytes      Int
+  originalName   String?
+  checksumSha256 String?
+
+  // Extracted by OCR pipeline
+  language String? // detected: de/en/fr/ar/...
+  ocrText  String? @db.Text // full text for search
+  ocrData  Json? // raw provider response (audit trail)
+
+  // Normalized extracted fields
+  extracted Json? // { amount, currency, date, merchant, vat, items[], iban, ... }
+
+  // AI-derived
+  summary String?  @db.Text
+  aiTags  String[] @default([])
+
+  uploadedAt  DateTime  @default(now())
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  // A tsvector index on ocrText is added via raw SQL migration
+  // (Prisma doesn't model GIN(tsvector) natively).
+
+  @@index([userId, uploadedAt])
+  @@index([userId, type])
+  @@index([status])
+}
+
+// ============================================================================
+// Budgets
+// ============================================================================
+
+model Budget {
+  id          String   @id @default(cuid())
+  userId      String
+  categoryId  String? // null = overall budget
+  amountMinor BigInt
+  currency    String
+  periodStart DateTime // inclusive, UTC midnight of first day
+  periodEnd   DateTime // exclusive
+  rollover    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, categoryId, periodStart])
+  @@index([userId, periodStart])
+}
+
+// ============================================================================
+// AI Assistant
+// ============================================================================
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+// ============================================================================
+// Tax profile (Germany-first — tax class, disability, extra deductions)
+// ============================================================================
+
+model TaxProfile {
+  id       String   @id @default(cuid())
+  userId   String   @unique
+  taxClass TaxClass @default(CLASS_1)
+
+  // Church tax (8-9% of Lohnsteuer, depending on Bundesland)
+  churchTax Boolean @default(false)
+
+  // Disability (Grad der Behinderung) — 20, 30, 40, 50, 60, 70, 80, 90, 100
+  disabilityDegree Int?
+
+  // Merkzeichen (impact disability Pauschbetrag + Fahrtkosten-Pauschbetrag)
+  merkzeichenAG  Boolean @default(false) // außergewöhnlich gehbehindert
+  merkzeichenG   Boolean @default(false) // gehbehindert
+  merkzeichenH   Boolean @default(false) // hilflos
+  merkzeichenBl  Boolean @default(false) // blind
+  merkzeichenGl  Boolean @default(false) // gehörlos
+  merkzeichenTBl Boolean @default(false) // taubblind
+
+  // User-entered annual amounts (euros * 100 in minor units)
+  extraordinaryBurdensMinor BigInt @default(0)
+  workExpensesMinor         BigInt @default(0) // Werbungskosten (overrides 1230 € pauschale if higher)
+  specialExpensesMinor      BigInt @default(0) // Sonderausgaben
+  donationsMinor            BigInt @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AiMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String // "user" | "assistant" | "system" | "tool"
+  content        String   @db.Text
+  toolCalls      Json?
+  tokensIn       Int?
+  tokensOut      Int?
+  model          String?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+// ============================================================================
+// Banking — PSD2 / GoCardless connections + CAMT.053 file imports
+// ============================================================================
+
+model BankConnection {
+  id       String                 @id @default(cuid())
+  userId   String
+  provider BankConnectionProvider
+  status   BankConnectionStatus   @default(PENDING_CONSENT)
+
+  // Provider-specific identifiers
+  institutionId   String? // GoCardless institution_id (e.g. "DEUTSCHE_BANK_DEUTDEFF")
+  institutionName String
+  institutionLogo String?
+  countryCode     String? // ISO 3166-1 alpha-2
+
+  // GoCardless-only
+  requisitionId    String?
+  agreementId      String?
+  consentExpiresAt DateTime?
+
+  lastSyncedAt DateTime?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accounts BankAccount[]
+
+  @@index([userId, status])
+  @@index([requisitionId])
+}
+
+model BankAccount {
+  id           String @id @default(cuid())
+  connectionId String
+
+  // Provider's account identifier (GoCardless account_id, or IBAN for CAMT)
+  externalId String
+
+  iban         String?
+  bic          String?
+  name         String?
+  ownerName    String?
+  currency     String    @default("EUR")
+  balanceMinor BigInt?
+  balanceAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  connection   BankConnection    @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  transactions BankTransaction[]
+
+  @@unique([connectionId, externalId])
+  @@index([connectionId])
+}
+
+model BankTransaction {
+  id        String @id @default(cuid())
+  accountId String
+
+  // Bank's stable identifier — used for deduplication on every sync.
+  externalId String
+
+  amountMinor BigInt
+  currency    String
+
+  bookingDate DateTime
+  valueDate   DateTime?
+
+  // Free-form bank text + parsed counterparty fields
+  remittanceInfo   String? @db.Text
+  counterpartyName String?
+  counterpartyIban String?
+  endToEndId       String?
+
+  // Full provider payload for audit and reprocessing
+  raw Json?
+
+  // Link to the LifeOS-side normalized Transaction.
+  // Set when the importer creates / matches one.
+  lifeosTransactionId String? @unique
+
+  importedAt DateTime @default(now())
+
+  account           BankAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lifeosTransaction Transaction? @relation("BankTxToLifeosTx", fields: [lifeosTransactionId], references: [id], onDelete: SetNull)
+
+  @@unique([accountId, externalId])
+  @@index([accountId, bookingDate])
+}
