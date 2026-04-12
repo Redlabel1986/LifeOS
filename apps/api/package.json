@@ -4,6 +4,7 @@
   "private": true,
   "description": "LifeOS GraphQL API (Yoga + Pothos on Fastify)",
   "type": "module",
+  "sideEffects": true,
   "main": "./src/server.ts",
   "exports": {
     "./schema": "./src/schema/index.ts",
