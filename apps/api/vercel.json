@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd ../.. && NODE_ENV=development pnpm install --frozen-lockfile && pnpm run codegen && cd apps/api && pnpm run build",
-  "installCommand": "corepack enable && corepack prepare pnpm@9.5.0 --activate",
+  "buildCommand": "cd ../.. && pnpm run codegen && cd apps/api && pnpm run build",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile --prod=false",
   "framework": null,
   "rewrites": [
     { "source": "/graphql", "destination": "/api" },
