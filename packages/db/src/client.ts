@@ -9,7 +9,7 @@
 // directly outside this module is forbidden.
 // ============================================================================
 
-import { PrismaClient } from "./generated/client/index.js";
+import { PrismaClient } from "@prisma/client";
 
 type GlobalWithPrisma = typeof globalThis & {
   __lifeosPrisma?: PrismaClient;

@@ -8,7 +8,7 @@
 // Idempotent: safe to re-run.
 // ============================================================================
 
-import { PrismaClient, CategoryKind } from "../src/generated/client/index.js";
+import { PrismaClient, CategoryKind } from "@prisma/client";
 
 const prisma = new PrismaClient();
 

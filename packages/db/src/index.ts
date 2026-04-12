@@ -21,7 +21,7 @@ export {
   BankConnectionProvider,
   BankConnectionStatus,
   TaxClass,
-} from "./generated/client/index.js";
+} from "@prisma/client";
 
 export type {
   User,
@@ -40,4 +40,4 @@ export type {
   BankAccount,
   BankTransaction,
   TaxProfile,
-} from "./generated/client/index.js";
+} from "@prisma/client";
