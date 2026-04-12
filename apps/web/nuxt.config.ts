@@ -69,7 +69,7 @@ export default defineNuxtConfig({
   css: ["~/assets/scss/main.scss"],
 
   nitro: {
-    // Allow importing TypeScript workspace packages in server routes
+    // Inline workspace TS packages but keep native/CJS deps external
     externals: {
       inline: [
         "@lifeos/api",
@@ -83,6 +83,20 @@ export default defineNuxtConfig({
         "@lifeos/utils",
         "@lifeos/graphql-schema",
       ],
+      external: [
+        "pino",
+        "pino-pretty",
+        "dotenv",
+        "@prisma/client",
+        "argon2",
+        "tesseract.js",
+      ],
+    },
+    // Polyfill __dirname for ESM compatibility
+    rollupConfig: {
+      output: {
+        intro: 'import { fileURLToPath as __fn__ } from "url"; import { dirname as __dn__ } from "path"; const __filename = __fn__(import.meta.url); const __dirname = __dn__(__filename);',
+      },
     },
   },
 
