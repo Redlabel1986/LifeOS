@@ -14,7 +14,7 @@ import {
   createUploadTicket,
   deleteObject,
   headObject,
-  writeLocalFile,
+  writeFile,
 } from "@lifeos/storage";
 import { GraphQLError } from "graphql";
 import { getQueue } from "../queue.js";
@@ -270,7 +270,7 @@ builder.mutationField("uploadDocument", (t) =>
         });
       }
 
-      const written = await writeLocalFile({
+      const written = await writeFile({
         userId: user.id,
         mimeType: input.mimeType,
         originalName: input.originalName,
@@ -283,7 +283,7 @@ builder.mutationField("uploadDocument", (t) =>
           type: input.type,
           status: DocumentStatus.PROCESSING,
           storageKey: written.storageKey,
-          storageBucket: "local",
+          storageBucket: written.storageKey.startsWith("blob://") ? "vercel-blob" : "local",
           mimeType: input.mimeType,
           sizeBytes: written.sizeBytes,
           originalName: input.originalName ?? null,

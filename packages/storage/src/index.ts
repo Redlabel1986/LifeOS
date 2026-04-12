@@ -1,9 +1,12 @@
 // ============================================================================
-// @lifeos/storage — S3-compatible object storage adapter
+// @lifeos/storage — Object storage adapter
 // ----------------------------------------------------------------------------
-// Works with MinIO in dev and real S3 in prod via the same API.
-// Exposes presigned URLs for direct client uploads/downloads so large files
-// never transit the API server.
+// Three backends:
+//   1. Vercel Blob  — used on Vercel (BLOB_READ_WRITE_TOKEN is set)
+//   2. S3-compatible — used in prod with MinIO / real S3
+//   3. Local FS      — dev fallback when neither is configured
+//
+// The active backend is chosen once at import time via `BLOB_READ_WRITE_TOKEN`.
 // ============================================================================
 
 import {
@@ -20,48 +23,16 @@ import { promises as fs, createReadStream } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 
-// ----------------------------------------------------------------------------
-// Local filesystem fallback
-// ----------------------------------------------------------------------------
-//
-// In dev without MinIO, we write files to a local directory and store
-// `local://<relativePath>` as the `storageKey`. The S3 helpers below detect
-// this prefix and route to the filesystem instead.
+// ---------------------------------------------------------------------------
+// Detect active backend
+// ---------------------------------------------------------------------------
 
-const LOCAL_STORAGE_DIR = resolve(
-  process.env.LOCAL_STORAGE_DIR ?? join(process.cwd(), ".storage"),
-);
+const VERCEL_BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
+const useVercelBlob = Boolean(VERCEL_BLOB_TOKEN);
 
-const LOCAL_PREFIX = "local://";
-const isLocal = (key: string): boolean => key.startsWith(LOCAL_PREFIX);
-const localPath = (key: string): string =>
-  join(LOCAL_STORAGE_DIR, key.slice(LOCAL_PREFIX.length));
-
-const client = new S3Client({
-  region: env.S3_REGION,
-  endpoint: env.S3_ENDPOINT,
-  forcePathStyle: env.S3_FORCE_PATH_STYLE,
-  credentials: {
-    accessKeyId: env.S3_ACCESS_KEY_ID,
-    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
-  },
-});
-
-export const DEFAULT_BUCKET = env.S3_BUCKET;
-
-export interface UploadTicket {
-  storageKey: string;
-  uploadUrl: string;
-  expiresAt: Date;
-  headers: Record<string, string>;
-}
-
-export interface CreateUploadTicketInput {
-  userId: string;
-  mimeType: string;
-  originalName?: string | null;
-  expiresInSeconds?: number;
-}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 const extForMime = (mime: string, originalName?: string | null): string => {
   if (originalName && originalName.includes(".")) {
@@ -76,6 +47,61 @@ const extForMime = (mime: string, originalName?: string | null): string => {
   };
   return map[mime] ?? "bin";
 };
+
+// ---------------------------------------------------------------------------
+// Local filesystem fallback (dev only)
+// ---------------------------------------------------------------------------
+
+const LOCAL_STORAGE_DIR = resolve(
+  process.env.LOCAL_STORAGE_DIR ?? join(process.cwd(), ".storage"),
+);
+
+const LOCAL_PREFIX = "local://";
+const isLocal = (key: string): boolean => key.startsWith(LOCAL_PREFIX);
+const localPath = (key: string): string =>
+  join(LOCAL_STORAGE_DIR, key.slice(LOCAL_PREFIX.length));
+
+// ---------------------------------------------------------------------------
+// S3 client (dev / self-hosted)
+// ---------------------------------------------------------------------------
+
+const client = new S3Client({
+  region: env.S3_REGION,
+  endpoint: env.S3_ENDPOINT,
+  forcePathStyle: env.S3_FORCE_PATH_STYLE,
+  credentials: {
+    accessKeyId: env.S3_ACCESS_KEY_ID,
+    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+  },
+});
+
+export const DEFAULT_BUCKET = env.S3_BUCKET;
+
+// ---------------------------------------------------------------------------
+// Vercel Blob prefix
+// ---------------------------------------------------------------------------
+
+const BLOB_PREFIX = "blob://";
+const isBlob = (key: string): boolean => key.startsWith(BLOB_PREFIX);
+const blobUrl = (key: string): string => key.slice(BLOB_PREFIX.length);
+
+// ---------------------------------------------------------------------------
+// Upload ticket (presigned S3 — only used when S3 is the active backend)
+// ---------------------------------------------------------------------------
+
+export interface UploadTicket {
+  storageKey: string;
+  uploadUrl: string;
+  expiresAt: Date;
+  headers: Record<string, string>;
+}
+
+export interface CreateUploadTicketInput {
+  userId: string;
+  mimeType: string;
+  originalName?: string | null;
+  expiresInSeconds?: number;
+}
 
 export const createUploadTicket = async (
   input: CreateUploadTicketInput,
@@ -97,17 +123,23 @@ export const createUploadTicket = async (
   };
 };
 
+// ---------------------------------------------------------------------------
+// createDownloadUrl
+// ---------------------------------------------------------------------------
+
 export const createDownloadUrl = async (
   storageKey: string,
   expiresInSeconds = 300,
 ): Promise<string> => {
+  // Vercel Blob URLs are already public / tokenized
+  if (isBlob(storageKey)) {
+    return blobUrl(storageKey);
+  }
+
   if (isLocal(storageKey)) {
-    // Local files are streamed via the API's /files/:id endpoint instead of
-    // a presigned URL. The web layer reads `Document.downloadUrl` and that
-    // resolver substitutes the right path. For backward-compat, return a
-    // marker that callers can detect.
     return `local://${storageKey.slice(LOCAL_PREFIX.length)}`;
   }
+
   const command = new GetObjectCommand({
     Bucket: DEFAULT_BUCKET,
     Key: storageKey,
@@ -115,9 +147,29 @@ export const createDownloadUrl = async (
   return getSignedUrl(client, command, { expiresIn: expiresInSeconds });
 };
 
+// ---------------------------------------------------------------------------
+// headObject
+// ---------------------------------------------------------------------------
+
 export const headObject = async (
   storageKey: string,
 ): Promise<{ exists: boolean; sizeBytes?: number; contentType?: string }> => {
+  if (isBlob(storageKey)) {
+    try {
+      const { head } = await import("@vercel/blob");
+      const metadata = await head(blobUrl(storageKey), {
+        token: VERCEL_BLOB_TOKEN!,
+      });
+      return {
+        exists: true,
+        sizeBytes: metadata.size,
+        contentType: metadata.contentType,
+      };
+    } catch {
+      return { exists: false };
+    }
+  }
+
   if (isLocal(storageKey)) {
     try {
       const stat = await fs.stat(localPath(storageKey));
@@ -126,6 +178,7 @@ export const headObject = async (
       return { exists: false };
     }
   }
+
   try {
     const res = await client.send(
       new HeadObjectCommand({ Bucket: DEFAULT_BUCKET, Key: storageKey }),
@@ -140,33 +193,57 @@ export const headObject = async (
   }
 };
 
+// ---------------------------------------------------------------------------
+// deleteObject
+// ---------------------------------------------------------------------------
+
 export const deleteObject = async (storageKey: string): Promise<void> => {
+  if (isBlob(storageKey)) {
+    const { del } = await import("@vercel/blob");
+    await del(blobUrl(storageKey), { token: VERCEL_BLOB_TOKEN! });
+    return;
+  }
+
   if (isLocal(storageKey)) {
     await fs.unlink(localPath(storageKey)).catch(() => undefined);
     return;
   }
+
   await client.send(
     new DeleteObjectCommand({ Bucket: DEFAULT_BUCKET, Key: storageKey }),
   );
 };
 
+// ---------------------------------------------------------------------------
+// getObjectStream
+// ---------------------------------------------------------------------------
+
 export const getObjectStream = async (
   storageKey: string,
 ): Promise<Readable | NodeJS.ReadableStream | undefined> => {
+  if (isBlob(storageKey)) {
+    const response = await fetch(blobUrl(storageKey));
+    if (!response.body) return undefined;
+    return Readable.fromWeb(response.body as any);
+  }
+
   if (isLocal(storageKey)) {
     return createReadStream(localPath(storageKey));
   }
+
   const res = await client.send(
     new GetObjectCommand({ Bucket: DEFAULT_BUCKET, Key: storageKey }),
   );
   return res.Body as Readable | undefined;
 };
 
-/**
- * Write a buffer to local storage and return its `local://` storageKey.
- * Used by the inline-upload mutation when no S3 backend is available.
- */
-export const writeLocalFile = async (input: {
+// ---------------------------------------------------------------------------
+// writeFile — the main "put bytes into storage" function
+// ---------------------------------------------------------------------------
+// On Vercel:  uses @vercel/blob put()
+// Elsewhere:  uses local filesystem
+
+export const writeFile = async (input: {
   userId: string;
   mimeType: string;
   originalName?: string | null;
@@ -174,17 +251,39 @@ export const writeLocalFile = async (input: {
 }): Promise<{ storageKey: string; sizeBytes: number }> => {
   const ext = extForMime(input.mimeType, input.originalName);
   const id = randomUUID();
-  const relative = `documents/${input.userId}/${id}.${ext}`;
-  const fullPath = join(LOCAL_STORAGE_DIR, relative);
+  const pathname = `documents/${input.userId}/${id}.${ext}`;
+
+  if (useVercelBlob) {
+    const { put } = await import("@vercel/blob");
+    const blob = await put(pathname, input.bytes, {
+      access: "public",
+      contentType: input.mimeType,
+      token: VERCEL_BLOB_TOKEN!,
+    });
+    return {
+      storageKey: `${BLOB_PREFIX}${blob.url}`,
+      sizeBytes: input.bytes.length,
+    };
+  }
+
+  // Local filesystem fallback
+  const fullPath = join(LOCAL_STORAGE_DIR, pathname);
   await fs.mkdir(dirname(fullPath), { recursive: true });
   await fs.writeFile(fullPath, input.bytes);
   return {
-    storageKey: `${LOCAL_PREFIX}${relative}`,
+    storageKey: `${LOCAL_PREFIX}${pathname}`,
     sizeBytes: input.bytes.length,
   };
 };
 
+// Keep backward-compat alias
+export const writeLocalFile = writeFile;
+
 export const readLocalFile = async (storageKey: string): Promise<Buffer> => {
+  if (isBlob(storageKey)) {
+    const response = await fetch(blobUrl(storageKey));
+    return Buffer.from(await response.arrayBuffer());
+  }
   if (!isLocal(storageKey)) throw new Error("Not a local storage key");
   return fs.readFile(localPath(storageKey));
 };

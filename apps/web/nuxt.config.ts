@@ -90,6 +90,7 @@ export default defineNuxtConfig({
         "@prisma/client",
         "argon2",
         "tesseract.js",
+        "@vercel/blob",
       ],
     },
     // Polyfill __dirname for ESM compatibility
