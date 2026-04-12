@@ -9,7 +9,8 @@
   "exports": {
     "./schema": "./src/schema/index.ts",
     "./context": "./src/context.ts",
-    "./queue": "./src/queue.ts"
+    "./queue": "./src/queue.ts",
+    "./auth/tokens": "./src/auth/tokens.ts"
   },
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/server.ts",

@@ -45,7 +45,12 @@
       "Bash(DATABASE_URL=\"postgresql://lifeos:lifeos@localhost:5432/lifeos\" pnpm run codegen)",
       "Bash(DATABASE_URL=\"postgresql://lifeos:lifeos@localhost:5432/lifeos\" npx prisma generate)",
       "Bash(git reset:*)",
-      "Bash(curl -s -X POST https://life-os-mrfoxs-projects-cc0a0bbb.vercel.app/graphql -H \"Content-Type: application/json\" -d '{\"query\":\"{__typename}\"}')"
+      "Bash(curl -s -X POST https://life-os-mrfoxs-projects-cc0a0bbb.vercel.app/graphql -H \"Content-Type: application/json\" -d '{\"query\":\"{__typename}\"}')",
+      "Bash(npx turbo:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx nuxt:*)",
+      "Bash(curl -s https://life-os-nine-lake-59.vercel.app/graphql -X POST -H \"Content-Type: application/json\" -d '{\"query\":\"{__typename}\"}')",
+      "Bash(curl -s https://life-os-nine-lake-59.vercel.app/)"
     ]
   }
 }

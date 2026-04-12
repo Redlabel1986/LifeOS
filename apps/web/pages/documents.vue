@@ -64,7 +64,6 @@ import { useMutation, useQuery } from "villus";
 import {
   DELETE_DOCUMENT_MUTATION,
   DOCUMENTS_QUERY,
-  UPLOAD_DOCUMENT_MUTATION,
 } from "~/graphql/operations";
 
 definePageMeta({ middleware: "auth" });
@@ -88,19 +87,9 @@ const { data, execute: refetch } = useQuery({
   variables: { page: { limit: 30, offset: 0 } },
 });
 
-const { execute: uploadDoc } = useMutation(UPLOAD_DOCUMENT_MUTATION);
 const { execute: deleteDoc } = useMutation(DELETE_DOCUMENT_MUTATION);
 
-const fileToBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1] ?? "");
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+const authStore = useAuthStore();
 
 const onFile = async (e: Event): Promise<void> => {
   const input = e.target as HTMLInputElement;
@@ -108,17 +97,19 @@ const onFile = async (e: Event): Promise<void> => {
   if (!file) return;
   uploading.value = true;
   try {
-    const fileBase64 = await fileToBase64(file);
-    const { error } = await uploadDoc({
-      input: {
-        type: uploadType.value,
-        mimeType: file.type || "application/octet-stream",
-        originalName: file.name,
-        fileBase64,
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("type", uploadType.value);
+
+    const res = await $fetch("/api/upload-document", {
+      method: "POST",
+      body: formData,
+      headers: {
+        Authorization: `Bearer ${authStore.accessToken}`,
       },
     });
-    if (error) {
-      console.error("upload failed", error);
+    if (!res?.documentId) {
+      console.error("upload failed: no documentId");
       return;
     }
     // Processing runs in the background. Refetch shortly so the user sees
@@ -127,6 +118,8 @@ const onFile = async (e: Event): Promise<void> => {
     setTimeout(() => {
       void refetch();
     }, 5000);
+  } catch (err) {
+    console.error("upload failed", err);
   } finally {
     uploading.value = false;
     input.value = "";
