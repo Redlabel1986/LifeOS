@@ -31,7 +31,20 @@
       "Bash(git config:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "Bash(gh repo:*)",
+      "Bash(git push:*)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_tAb0fCa2xgoF@ep-proud-dew-alojjybk-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require\" npx prisma migrate deploy)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_tAb0fCa2xgoF@ep-proud-dew-alojjybk-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require\" npx prisma db seed)",
+      "Bash(openssl rand:*)",
+      "Bash(echo \"JWT_ACCESS_SECRET=$\\(openssl rand -hex 32\\)\")",
+      "Bash(echo \"JWT_REFRESH_SECRET=$\\(openssl rand -hex 32\\)\")",
+      "Bash(echo \"CRYPTO_MASTER_KEY=$\\(openssl rand -hex 24\\)\")",
+      "Bash(git commit:*)",
+      "Bash(pnpm run:*)",
+      "Bash(DATABASE_URL=\"postgresql://lifeos:lifeos@localhost:5432/lifeos\" pnpm run codegen)",
+      "Bash(DATABASE_URL=\"postgresql://lifeos:lifeos@localhost:5432/lifeos\" npx prisma generate)",
+      "Bash(git reset:*)"
     ]
   }
 }

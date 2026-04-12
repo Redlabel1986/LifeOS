@@ -105,6 +105,30 @@ importers:
 
   apps/web:
     dependencies:
+      '@lifeos/ai':
+        specifier: workspace:^
+        version: link:../../packages/ai
+      '@lifeos/api':
+        specifier: workspace:^
+        version: link:../api
+      '@lifeos/banking':
+        specifier: workspace:^
+        version: link:../../packages/banking
+      '@lifeos/config':
+        specifier: workspace:^
+        version: link:../../packages/config
+      '@lifeos/db':
+        specifier: workspace:^
+        version: link:../../packages/db
+      '@lifeos/mail':
+        specifier: workspace:^
+        version: link:../../packages/mail
+      '@lifeos/ocr':
+        specifier: workspace:^
+        version: link:../../packages/ocr
+      '@lifeos/storage':
+        specifier: workspace:^
+        version: link:../../packages/storage
       '@lifeos/utils':
         specifier: workspace:*
         version: link:../../packages/utils
@@ -114,6 +138,12 @@ importers:
       '@pinia/nuxt':
         specifier: ^0.5.1
         version: 0.5.5(magicast@0.3.5)(rollup@4.60.1)(typescript@5.9.3)(vue@3.5.32(typescript@5.9.3))
+      '@pothos/core':
+        specifier: ^4.0.0
+        version: 4.12.0(graphql@16.13.2)
+      '@pothos/plugin-prisma':
+        specifier: ^4.0.0
+        version: 4.14.3(@pothos/core@4.12.0(graphql@16.13.2))(@prisma/client@5.22.0(prisma@5.22.0))(graphql@16.13.2)(typescript@5.9.3)
       '@vueuse/core':
         specifier: ^10.11.0
         version: 10.11.1(vue@3.5.32(typescript@5.9.3))
@@ -126,6 +156,9 @@ importers:
       graphql:
         specifier: ^16.9.0
         version: 16.13.2
+      graphql-yoga:
+        specifier: ^5.6.0
+        version: 5.21.0(graphql@16.13.2)
       nuxt:
         specifier: 3.13.2
         version: 3.13.2(@parcel/watcher@2.5.6)(@types/node@20.19.39)(db0@0.3.4)(idb-keyval@6.2.2)(ioredis@5.10.1)(magicast@0.3.5)(rollup@4.60.1)(sass@1.99.0)(srvx@0.11.15)(terser@5.46.1)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.39)(sass@1.99.0)(terser@5.46.1))

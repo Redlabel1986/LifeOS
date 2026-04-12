@@ -24,7 +24,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      apiUrl: process.env.API_PUBLIC_URL ?? "http://localhost:4000/graphql",
+      apiUrl: process.env.API_PUBLIC_URL ?? "/graphql",
       appName: "LifeOS",
     },
   },
@@ -67,6 +67,24 @@ export default defineNuxtConfig({
   },
 
   css: ["~/assets/scss/main.scss"],
+
+  nitro: {
+    // Allow importing TypeScript workspace packages in server routes
+    externals: {
+      inline: [
+        "@lifeos/api",
+        "@lifeos/ai",
+        "@lifeos/config",
+        "@lifeos/db",
+        "@lifeos/banking",
+        "@lifeos/mail",
+        "@lifeos/ocr",
+        "@lifeos/storage",
+        "@lifeos/utils",
+        "@lifeos/graphql-schema",
+      ],
+    },
+  },
 
   vite: {
     css: {
