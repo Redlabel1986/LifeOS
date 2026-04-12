@@ -1,6 +1,7 @@
 <template>
   <Html :lang="locale" :dir="dir">
     <Body>
+      <EkgBackground />
       <NuxtLayout>
         <NuxtPage />
       </NuxtLayout>
