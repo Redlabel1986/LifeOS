@@ -1,0 +1,696 @@
+################################################################################
+# LifeOS — GraphQL Schema
+# Package: @lifeos/graphql-schema
+# ------------------------------------------------------------------------------
+# This SDL is the canonical API contract.
+#   * apps/api implements it via Pothos; its generated schema must match this.
+#   * apps/web consumes it via graphql-codegen for typed queries.
+#
+# Conventions:
+#   * Money is always a `Money` object (BigInt minor units + ISO currency).
+#   * All list queries return a `Page<T>` with offset pagination.
+#   * Mutations return a typed payload, never a bare entity.
+#   * Inputs are explicit; no generic `where` objects.
+#   * i18n strings on reference data expose both raw `translations` and a
+#     `name(locale)` resolver that defaults to the viewer's locale.
+################################################################################
+
+# ============================================================================
+# Scalars
+# ============================================================================
+
+scalar DateTime   # ISO 8601 UTC
+scalar BigInt     # 64-bit integer serialized as string
+scalar Decimal    # Arbitrary-precision decimal as string
+scalar JSON       # Opaque JSON value
+
+# ============================================================================
+# Enums
+# ============================================================================
+
+enum Locale {
+  de
+  en
+  fr
+  ar
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionSource {
+  MANUAL
+  DOCUMENT
+  EMAIL
+  BANK_IMPORT
+  AI_SUGGESTED
+}
+
+enum BillingCycle {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUAL
+  ANNUAL
+  CUSTOM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum DocumentType {
+  RECEIPT
+  INVOICE
+  CONTRACT
+  LETTER
+  TAX_DOCUMENT
+  OTHER
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum ReminderChannel {
+  EMAIL
+  PUSH
+  IN_APP
+}
+
+enum SortDirection {
+  ASC
+  DESC
+}
+
+enum TransactionSortField {
+  OCCURRED_AT
+  AMOUNT
+  CREATED_AT
+}
+
+# ============================================================================
+# Shared primitives
+# ============================================================================
+
+"""
+Money amount. `amountMinor` is always positive; direction is conveyed by the
+enclosing entity (e.g. `Transaction.type`). `currency` is ISO 4217.
+"""
+type Money {
+  amountMinor: BigInt!
+  currency: String!
+}
+
+input MoneyInput {
+  amountMinor: BigInt!
+  currency: String!
+}
+
+input PageInput {
+  limit: Int = 25
+  offset: Int = 0
+}
+
+input DateRangeInput {
+  from: DateTime!
+  to: DateTime!
+}
+
+type PageInfo {
+  totalCount: Int!
+  hasMore: Boolean!
+  limit: Int!
+  offset: Int!
+}
+
+# ============================================================================
+# User & Auth
+# ============================================================================
+
+type User {
+  id: ID!
+  email: String!
+  displayName: String
+  locale: Locale!
+  currency: String!
+  timezone: String!
+  emailVerified: Boolean!
+  createdAt: DateTime!
+}
+
+type AuthPayload {
+  user: User!
+  accessToken: String!
+  refreshToken: String!
+  expiresAt: DateTime!
+}
+
+input SignUpInput {
+  email: String!
+  password: String!
+  displayName: String
+  locale: Locale
+  currency: String
+  timezone: String
+}
+
+input SignInInput {
+  email: String!
+  password: String!
+}
+
+input UpdateProfileInput {
+  displayName: String
+  locale: Locale
+  currency: String
+  timezone: String
+}
+
+input ChangePasswordInput {
+  currentPassword: String!
+  newPassword: String!
+}
+
+# ============================================================================
+# Categories (i18n)
+# ============================================================================
+
+type Category {
+  id: ID!
+  kind: CategoryKind!
+  slug: String!
+  """Localized name. Defaults to viewer's locale when `locale` is omitted."""
+  name(locale: Locale): String!
+  """Raw translations map: { de, en, fr, ar }"""
+  translations: JSON!
+  icon: String
+  color: String
+  taxDeductible: Boolean!
+  taxCode: String
+  isSystem: Boolean!
+  parent: Category
+  children: [Category!]!
+}
+
+input CreateCategoryInput {
+  kind: CategoryKind!
+  slug: String!
+  translations: JSON!
+  parentId: ID
+  icon: String
+  color: String
+  taxDeductible: Boolean
+  taxCode: String
+}
+
+input UpdateCategoryInput {
+  slug: String
+  translations: JSON
+  parentId: ID
+  icon: String
+  color: String
+  taxDeductible: Boolean
+  taxCode: String
+}
+
+type CategoryPayload {
+  category: Category!
+}
+
+# ============================================================================
+# Merchants
+# ============================================================================
+
+type Merchant {
+  id: ID!
+  name: String!
+  displayName: String!
+  website: String
+  logoUrl: String
+  countryCode: String
+  defaultCategory: Category
+}
+
+# ============================================================================
+# Transactions
+# ============================================================================
+
+type Transaction {
+  id: ID!
+  type: TransactionType!
+  source: TransactionSource!
+  money: Money!
+  exchangeRate: Decimal
+  occurredAt: DateTime!
+  bookedAt: DateTime
+  description: String
+  note: String
+  tags: [String!]!
+  taxDeductible: Boolean!
+  aiConfidence: Float
+  needsReview: Boolean!
+  category: Category
+  merchant: Merchant
+  subscription: Subscription
+  document: Document
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type TransactionPage {
+  items: [Transaction!]!
+  pageInfo: PageInfo!
+}
+
+input TransactionFilter {
+  types: [TransactionType!]
+  categoryIds: [ID!]
+  merchantIds: [ID!]
+  subscriptionId: ID
+  dateRange: DateRangeInput
+  minAmountMinor: BigInt
+  maxAmountMinor: BigInt
+  tags: [String!]
+  needsReview: Boolean
+  search: String
+}
+
+input TransactionSort {
+  field: TransactionSortField = OCCURRED_AT
+  direction: SortDirection = DESC
+}
+
+input CreateTransactionInput {
+  type: TransactionType!
+  money: MoneyInput!
+  occurredAt: DateTime!
+  categoryId: ID
+  merchantId: ID
+  description: String
+  note: String
+  tags: [String!]
+  taxDeductible: Boolean
+  documentId: ID
+  subscriptionId: ID
+}
+
+input UpdateTransactionInput {
+  type: TransactionType
+  money: MoneyInput
+  occurredAt: DateTime
+  categoryId: ID
+  merchantId: ID
+  description: String
+  note: String
+  tags: [String!]
+  taxDeductible: Boolean
+}
+
+type TransactionPayload {
+  transaction: Transaction!
+}
+
+# ============================================================================
+# Subscriptions & Contracts
+# ============================================================================
+
+type Subscription {
+  id: ID!
+  name: String!
+  description: String
+  status: SubscriptionStatus!
+  money: Money!
+  billingCycle: BillingCycle!
+  customCycleDays: Int
+  startedAt: DateTime!
+  nextRenewalAt: DateTime
+  cancellationDeadline: DateTime
+  cancelledAt: DateTime
+  cancellationUrl: String
+  contactEmail: String
+  autoDetected: Boolean!
+  detectionConfidence: Float
+  category: Category
+  merchant: Merchant
+  upcomingReminder: SubscriptionReminder
+  recentTransactions(limit: Int = 5): [Transaction!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type SubscriptionReminder {
+  id: ID!
+  remindAt: DateTime!
+  sentAt: DateTime
+  channel: ReminderChannel!
+}
+
+type SubscriptionPage {
+  items: [Subscription!]!
+  pageInfo: PageInfo!
+}
+
+input SubscriptionFilter {
+  statuses: [SubscriptionStatus!]
+  categoryIds: [ID!]
+  renewalBefore: DateTime
+}
+
+input CreateSubscriptionInput {
+  name: String!
+  description: String
+  money: MoneyInput!
+  billingCycle: BillingCycle!
+  customCycleDays: Int
+  startedAt: DateTime!
+  nextRenewalAt: DateTime
+  cancellationDeadline: DateTime
+  cancellationUrl: String
+  contactEmail: String
+  categoryId: ID
+  merchantId: ID
+}
+
+input UpdateSubscriptionInput {
+  name: String
+  description: String
+  money: MoneyInput
+  billingCycle: BillingCycle
+  customCycleDays: Int
+  status: SubscriptionStatus
+  nextRenewalAt: DateTime
+  cancellationDeadline: DateTime
+  cancellationUrl: String
+  contactEmail: String
+  categoryId: ID
+  merchantId: ID
+}
+
+type SubscriptionPayload {
+  subscription: Subscription!
+}
+
+"""
+Localized cancellation email draft. The client shows this to the user,
+who confirms via `sendCancellationEmail` — nothing leaves the server before
+that explicit confirmation.
+"""
+type CancellationDraft {
+  subject: String!
+  body: String!
+  recipient: String
+  locale: Locale!
+}
+
+# ============================================================================
+# Documents
+# ============================================================================
+
+type Document {
+  id: ID!
+  type: DocumentType!
+  status: DocumentStatus!
+  mimeType: String!
+  sizeBytes: Int!
+  originalName: String
+  language: String
+  summary: String
+  aiTags: [String!]!
+  extracted: JSON
+  """Presigned GET URL — short-lived, generated on demand."""
+  downloadUrl: String!
+  uploadedAt: DateTime!
+  processedAt: DateTime
+  transactions: [Transaction!]!
+}
+
+type DocumentPage {
+  items: [Document!]!
+  pageInfo: PageInfo!
+}
+
+input DocumentFilter {
+  types: [DocumentType!]
+  statuses: [DocumentStatus!]
+  dateRange: DateRangeInput
+  search: String
+}
+
+"""Step 1 of upload: the client requests a presigned URL."""
+type DocumentUploadTicket {
+  documentId: ID!
+  uploadUrl: String!
+  storageKey: String!
+  expiresAt: DateTime!
+  requiredHeaders: JSON!
+}
+
+input RequestDocumentUploadInput {
+  type: DocumentType!
+  mimeType: String!
+  sizeBytes: Int!
+  originalName: String
+  checksumSha256: String
+}
+
+input ConfirmDocumentUploadInput {
+  documentId: ID!
+}
+
+type DocumentPayload {
+  document: Document!
+}
+
+# ============================================================================
+# Budgets
+# ============================================================================
+
+type Budget {
+  id: ID!
+  category: Category
+  money: Money!
+  periodStart: DateTime!
+  periodEnd: DateTime!
+  rollover: Boolean!
+  spent: Money!
+  remaining: Money!
+  progress: Float!
+}
+
+input SetBudgetInput {
+  categoryId: ID
+  money: MoneyInput!
+  periodStart: DateTime!
+  periodEnd: DateTime!
+  rollover: Boolean
+}
+
+type BudgetPayload {
+  budget: Budget!
+}
+
+# ============================================================================
+# Dashboard & Insights
+# ============================================================================
+
+type CategoryBreakdownItem {
+  category: Category
+  total: Money!
+  share: Float!
+  transactionCount: Int!
+}
+
+type MonthlySeriesPoint {
+  month: DateTime!
+  income: Money!
+  expense: Money!
+  net: Money!
+}
+
+type DashboardOverview {
+  period: DateRange!
+  income: Money!
+  expense: Money!
+  net: Money!
+  expenseByCategory: [CategoryBreakdownItem!]!
+  monthlyTrend: [MonthlySeriesPoint!]!
+  upcomingRenewals: [Subscription!]!
+  budgets: [Budget!]!
+  recentTransactions: [Transaction!]!
+  anomalies: [Anomaly!]!
+}
+
+type DateRange {
+  from: DateTime!
+  to: DateTime!
+}
+
+type Anomaly {
+  id: ID!
+  kind: String!
+  message: String!
+  severity: String!
+  relatedTransaction: Transaction
+  relatedSubscription: Subscription
+}
+
+# ============================================================================
+# Tax (Germany-first)
+# ============================================================================
+
+type TaxSummary {
+  year: Int!
+  totalDeductible: Money!
+  byCategory: [TaxCategoryTotal!]!
+  estimatedSavings: Money
+}
+
+type TaxCategoryTotal {
+  category: Category!
+  total: Money!
+  transactionCount: Int!
+}
+
+# ============================================================================
+# AI Assistant
+# ============================================================================
+
+type AiConversation {
+  id: ID!
+  title: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  messages: [AiMessage!]!
+}
+
+type AiMessage {
+  id: ID!
+  role: String!
+  content: String!
+  createdAt: DateTime!
+}
+
+input SendAiMessageInput {
+  conversationId: ID
+  content: String!
+}
+
+type AiMessagePayload {
+  conversation: AiConversation!
+  message: AiMessage!
+}
+
+# ============================================================================
+# Root: Query
+# ============================================================================
+
+type Query {
+  # Session
+  me: User
+
+  # Categories
+  categories(kind: CategoryKind): [Category!]!
+  category(id: ID!): Category
+
+  # Transactions
+  transaction(id: ID!): Transaction
+  transactions(
+    filter: TransactionFilter
+    sort: TransactionSort
+    page: PageInput
+  ): TransactionPage!
+
+  # Subscriptions
+  subscription(id: ID!): Subscription
+  subscriptions(filter: SubscriptionFilter, page: PageInput): SubscriptionPage!
+
+  # Documents
+  document(id: ID!): Document
+  documents(filter: DocumentFilter, page: PageInput): DocumentPage!
+
+  # Budgets
+  budgets(period: DateRangeInput): [Budget!]!
+
+  # Merchants
+  merchants(search: String, limit: Int = 20): [Merchant!]!
+
+  # Dashboard
+  dashboardOverview(period: DateRangeInput!): DashboardOverview!
+
+  # Tax
+  taxSummary(year: Int!): TaxSummary!
+
+  # AI
+  aiConversation(id: ID!): AiConversation
+  aiConversations(page: PageInput): [AiConversation!]!
+}
+
+# ============================================================================
+# Root: Mutation
+# ============================================================================
+
+type Mutation {
+  # Auth
+  signUp(input: SignUpInput!): AuthPayload!
+  signIn(input: SignInInput!): AuthPayload!
+  signOut: Boolean!
+  refreshToken(refreshToken: String!): AuthPayload!
+  updateProfile(input: UpdateProfileInput!): User!
+  changePassword(input: ChangePasswordInput!): Boolean!
+
+  # Categories
+  createCategory(input: CreateCategoryInput!): CategoryPayload!
+  updateCategory(id: ID!, input: UpdateCategoryInput!): CategoryPayload!
+  deleteCategory(id: ID!): Boolean!
+
+  # Transactions
+  createTransaction(input: CreateTransactionInput!): TransactionPayload!
+  updateTransaction(id: ID!, input: UpdateTransactionInput!): TransactionPayload!
+  deleteTransaction(id: ID!): Boolean!
+  categorizeTransaction(id: ID!, categoryId: ID!): TransactionPayload!
+
+  # Subscriptions
+  createSubscription(input: CreateSubscriptionInput!): SubscriptionPayload!
+  updateSubscription(id: ID!, input: UpdateSubscriptionInput!): SubscriptionPayload!
+  cancelSubscription(id: ID!): SubscriptionPayload!
+  generateCancellationEmail(id: ID!, locale: Locale): CancellationDraft!
+  sendCancellationEmail(id: ID!, subject: String!, body: String!): Boolean!
+
+  # Documents
+  requestDocumentUpload(input: RequestDocumentUploadInput!): DocumentUploadTicket!
+  confirmDocumentUpload(input: ConfirmDocumentUploadInput!): DocumentPayload!
+  deleteDocument(id: ID!): Boolean!
+  reprocessDocument(id: ID!): DocumentPayload!
+
+  # Budgets
+  setBudget(input: SetBudgetInput!): BudgetPayload!
+  deleteBudget(id: ID!): Boolean!
+
+  # AI
+  sendAiMessage(input: SendAiMessageInput!): AiMessagePayload!
+  deleteAiConversation(id: ID!): Boolean!
+}
+
+# ============================================================================
+# Root: Subscription (reserved for future — not in MVP)
+# ============================================================================
+
+# type Subscription {
+#   documentProcessed(documentId: ID!): Document!
+#   aiMessageStreamed(conversationId: ID!): AiMessage!
+# }

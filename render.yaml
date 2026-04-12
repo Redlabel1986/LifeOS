@@ -1,0 +1,53 @@
+# ============================================================================
+# Render Blueprint — LifeOS API + Worker
+# ============================================================================
+# Deploy: connect your GitHub repo on render.com, it picks this up automatically.
+# Set environment variables in Render dashboard (from .env.example).
+
+services:
+  - type: web
+    name: lifeos-api
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    startCommand: node apps/api/dist/server.js
+    healthCheckPath: /graphql
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: "4000"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: CRYPTO_MASTER_KEY
+        generateValue: true
+
+  - type: worker
+    name: lifeos-worker
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    startCommand: node apps/worker/dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: CRYPTO_MASTER_KEY
+        sync: false

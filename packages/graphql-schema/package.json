@@ -1,0 +1,35 @@
+{
+  "name": "@lifeos/graphql-schema",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Canonical GraphQL SDL + generated TypeScript types shared by @lifeos/api and @lifeos/web",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema.graphql": "./schema.graphql",
+    "./types": "./src/generated/types.ts"
+  },
+  "files": [
+    "schema.graphql",
+    "src"
+  ],
+  "scripts": {
+    "codegen": "graphql-codegen --config codegen.yml",
+    "codegen:watch": "graphql-codegen --config codegen.yml --watch",
+    "validate": "graphql-inspector validate './src/**/*.graphql' schema.graphql || true",
+    "clean": "rimraf src/generated",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "graphql": "^16.9.0"
+  },
+  "devDependencies": {
+    "@graphql-codegen/cli": "^5.0.3",
+    "@graphql-codegen/typescript": "^4.1.0",
+    "@graphql-codegen/typescript-operations": "^4.3.0",
+    "rimraf": "^5.0.7",
+    "typescript": "^5.5.3"
+  }
+}

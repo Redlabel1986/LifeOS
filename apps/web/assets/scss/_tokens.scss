@@ -1,0 +1,91 @@
+// ============================================================================
+// Design tokens — LifeOS Cyberpunk
+// ============================================================================
+
+// --- Breakpoints ------------------------------------------------------------
+
+$bp-sm: 640px;
+$bp-md: 768px;
+$bp-lg: 1024px;
+$bp-xl: 1280px;
+
+@mixin sm { @media (min-width: #{$bp-sm}) { @content; } }
+@mixin md { @media (min-width: #{$bp-md}) { @content; } }
+@mixin lg { @media (min-width: #{$bp-lg}) { @content; } }
+@mixin xl { @media (min-width: #{$bp-xl}) { @content; } }
+
+// --- Color ramps — Cyberpunk palette ----------------------------------------
+
+$cyan-50:  #ecfeff;
+$cyan-100: #cffafe;
+$cyan-200: #a5f3fc;
+$cyan-300: #67e8f9;
+$cyan-400: #22d3ee;
+$cyan-500: #06b6d4;
+$cyan-600: #0891b2;
+$cyan-700: #0e7490;
+
+$violet-400: #a78bfa;
+$violet-500: #8b5cf6;
+$violet-600: #7c3aed;
+
+$fuchsia-400: #e879f9;
+$fuchsia-500: #d946ef;
+
+$slate-50:  #f8fafc;
+$slate-100: #f1f5f9;
+$slate-200: #e2e8f0;
+$slate-300: #cbd5e1;
+$slate-400: #94a3b8;
+$slate-500: #64748b;
+$slate-600: #475569;
+$slate-700: #334155;
+$slate-800: #1e293b;
+$slate-850: #162032;
+$slate-900: #0f172a;
+$slate-950: #080d1a;
+
+$red-400:    #f87171;
+$red-500:    #ef4444;
+$green-400:  #4ade80;
+$green-500:  #22c55e;
+$amber-400:  #fbbf24;
+$amber-500:  #f59e0b;
+
+// --- Mixins -----------------------------------------------------------------
+
+@mixin card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(12px);
+}
+
+@mixin glass {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+}
+
+@mixin glow($color: var(--neon)) {
+  box-shadow:
+    0 0 8px rgba(6, 182, 212, 0.15),
+    0 0 20px rgba(6, 182, 212, 0.06);
+}
+
+@mixin focus-ring {
+  outline: 2px solid var(--neon);
+  outline-offset: 2px;
+}
+
+@mixin text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin neon-text {
+  color: var(--neon);
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}

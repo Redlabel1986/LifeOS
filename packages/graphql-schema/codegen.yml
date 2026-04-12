@@ -1,0 +1,40 @@
+# ============================================================================
+# @lifeos/graphql-schema — codegen config
+# ----------------------------------------------------------------------------
+# Generates base TypeScript types from the canonical SDL.
+# These types are consumed by:
+#   * apps/api     — as the contract its Pothos resolvers must satisfy
+#   * apps/web     — as the base types operation codegen extends
+#
+# Wire-level scalar strategy:
+#   * DateTime / BigInt / Decimal are transported as strings.
+#     Parsing into Date / bigint / Decimal is done at the app boundary, not
+#     inside generated types — this keeps the contract JSON-safe and avoids
+#     runtime coercion surprises.
+#   * JSON is an opaque record; consumers narrow it with zod at the boundary.
+# ============================================================================
+
+overwrite: true
+schema: ./schema.graphql
+
+generates:
+  ./src/generated/types.ts:
+    plugins:
+      - typescript
+    config:
+      useTypeImports: true
+      enumsAsTypes: false
+      immutableTypes: false
+      skipTypename: false
+      avoidOptionals:
+        field: true
+        inputValue: false
+        object: false
+        defaultValue: false
+      maybeValue: "T | null"
+      inputMaybeValue: "T | null | undefined"
+      scalars:
+        DateTime: string
+        BigInt: string
+        Decimal: string
+        JSON: Record<string, unknown>

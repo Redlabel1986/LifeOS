@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.output/
+.nuxt/
+.turbo/
+*.tsbuildinfo
+
+# Generated code
+**/src/generated/
+packages/graphql-schema/src/generated/
+packages/db/src/generated/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local storage
+.storage/
+
+# Local Redis (portable)
+redis/
+redis.zip
+
+# Test
+coverage/

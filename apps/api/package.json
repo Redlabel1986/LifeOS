@@ -1,0 +1,43 @@
+{
+  "name": "@lifeos/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LifeOS GraphQL API (Yoga + Pothos on Fastify)",
+  "type": "module",
+  "main": "./src/server.ts",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@lifeos/ai": "workspace:*",
+    "@lifeos/banking": "workspace:*",
+    "@lifeos/config": "workspace:*",
+    "@lifeos/db": "workspace:*",
+    "@lifeos/graphql-schema": "workspace:*",
+    "@lifeos/mail": "workspace:*",
+    "@lifeos/ocr": "workspace:*",
+    "@lifeos/storage": "workspace:*",
+    "@lifeos/utils": "workspace:*",
+    "@pothos/core": "^4.0.0",
+    "@pothos/plugin-prisma": "^4.0.0",
+    "argon2": "^0.40.3",
+    "bullmq": "^5.10.3",
+    "fastify": "^4.28.1",
+    "graphql": "^16.9.0",
+    "graphql-scalars": "^1.23.0",
+    "graphql-yoga": "^5.6.0",
+    "ioredis": "^5.4.1",
+    "jose": "^5.6.3",
+    "pino": "^9.3.1",
+    "pino-pretty": "^11.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}

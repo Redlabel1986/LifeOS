@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(DATABASE_URL=\"postgresql://lifeos:lifeos@localhost:5432/lifeos\" pnpm --filter @lifeos/db exec prisma migrate dev --name banking)",
+      "Bash(curl -s -X POST http://localhost:4000/graphql -H \"Content-Type: application/json\" -d '{\"query\":\"{ bankingConfigured }\"}')",
+      "Bash(curl -s -o /dev/null -w \"GET /bank-accounts -> %{http_code}\\\\n\" http://localhost:3000/bank-accounts)",
+      "Bash(curl -s -X POST http://localhost:4000/graphql -H \"Content-Type: application/json\" -d '{\"query\":\"{ __type\\(name:\\\\\"TransactionTotals\\\\\"\\){name fields{name}} }\"}')",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(DATABASE_URL=\"postgresql://lifeos:lifeos@localhost:5432/lifeos\" pnpm --filter @lifeos/db exec prisma migrate dev --name payslip_type)",
+      "Bash(curl -s -X POST http://localhost:4000/graphql -H \"Content-Type: application/json\" -d '{\"query\":\"{ __type\\(name:\\\\\"SalarySummary\\\\\"\\){name fields{name}} }\"}')",
+      "Bash(curl -s -X POST http://localhost:4000/graphql -H \"Content-Type: application/json\" -d '{\"query\":\"mutation{signIn\\(input:{email:\\\\\"smoke@lifeos.dev\\\\\",password:\\\\\"hunter2hunter2\\\\\"}\\){accessToken}}\"}')",
+      "Bash(/c/Users/JGehr/redis/redis-cli.exe DEL \"bull:process-document:{\\\\\"name\\\\\":\\\\\"process\\\\\",\\\\\"data\\\\\":{\\\\\"documentId\\\\\":\\\\\"cmnvzspe6000hcj2m8j8j3s0s\\\\\"},\\\\\"opts\\\\\":{\\\\\"attempts\\\\\":3}}\")",
+      "Bash(/c/Users/JGehr/redis/redis-cli.exe LRANGE \"bull:process-document:wait\" 0 -1)",
+      "Bash(export PATH='/c/Program Files/PostgreSQL/16/bin:$PATH')",
+      "Bash(psql -h localhost -U lifeos -d lifeos -tAc \"SELECT id FROM \\\\\"User\\\\\" LIMIT 1\")",
+      "Bash(curl -s -X POST http://localhost:4000/graphql -H 'Content-Type: application/json' -H 'Cookie: __CMDSUB_OUTPUT__' -d '{\"query\":\"mutation { a: reprocessDocument\\(id: \\\\\"cmnvzspe6000hcj2m8j8j3s0s\\\\\"\\) { documentId } b: reprocessDocument\\(id: \\\\\"cmnvzt1yk000jcj2mvc0z62up\\\\\"\\) { documentId } }\"}')",
+      "Bash(curl -s -X POST http://localhost:4000/graphql -H 'Content-Type: application/json' -d '{\"query\":\"mutation { a: reprocessDocument\\(id: \\\\\"cmnvzspe6000hcj2m8j8j3s0s\\\\\"\\) { document { id status } } b: reprocessDocument\\(id: \\\\\"cmnvzt1yk000jcj2mvc0z62up\\\\\"\\) { document { id status } } }\"}')",
+      "Bash(npx tsx --env-file=../../.env -e ':*)",
+      "Bash(/c/Users/JGehr/redis/redis-cli.exe ZRANGE \"bull:process-document:waiting\" 0 -1)",
+      "Bash(/c/Users/JGehr/redis/redis-cli.exe LRANGE \"bull:process-document:active\" 0 -1)",
+      "Bash(/c/Users/JGehr/redis/redis-cli.exe ZRANGEBYSCORE \"bull:process-document:completed\" -inf +inf LIMIT 0 5)",
+      "Bash(/c/Users/JGehr/redis/redis-cli.exe HGETALL \"bull:process-document:5\")",
+      "Bash(/c/Users/JGehr/redis/redis-cli.exe HGETALL \"bull:process-document:4\")",
+      "Bash(/c/Users/JGehr/redis/redis-cli.exe FLUSHDB)",
+      "Bash(curl -s http://localhost:4000/graphql -X POST -H \"Content-Type: application/json\" -d '{\"query\":\"{__typename}\"}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4000/graphql)",
+      "Bash(curl -s -X POST http://localhost:4000/graphql -H 'Content-Type: application/json' -d '{\"query\":\"mutation { updateSubscription\\(id: \\\\\"test\\\\\", input: { name: \\\\\"NewName\\\\\" }\\) { subscription { id name } } }\"}')",
+      "Bash(curl -s http://localhost:3000/transactions)",
+      "Bash(gh auth:*)",
+      "Bash(git config:*)"
+    ]
+  }
+}
