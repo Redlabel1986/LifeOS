@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
     body: req.method !== "GET" && req.method !== "HEAD" ? body : undefined,
   });
 
-  const response = await yoga.fetch(request);
+  const response = await yoga.fetch(request, { req: request });
 
   // Send response back through Node
   res.statusCode = response.status;
