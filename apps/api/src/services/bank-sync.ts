@@ -65,6 +65,7 @@ const matchMerchant = (text: string, merchants: Merchant[]): Merchant | null => 
 const importRecord = async (
   account: BankAccount & { connection: BankConnection },
   record: BankTransactionRecord,
+  options?: { skipAi?: boolean },
 ): Promise<{ created: boolean }> => {
   // Dedupe: same (accountId, externalId) means we already imported it.
   const existing = await prisma.bankTransaction.findUnique({
@@ -98,8 +99,8 @@ const importRecord = async (
     }
   }
 
-  // 2. AI fallback: only if no merchant rule matched
-  if (!categoryId) {
+  // 2. AI fallback: only if no merchant rule matched (skip in bulk imports)
+  if (!categoryId && !options?.skipAi) {
     try {
       const cats = await prisma.category.findMany({
         where: {
@@ -420,13 +421,14 @@ export const importCamtFile = async (input: {
     });
   }
 
-  // Import every parsed record through the same path as live sync.
+  // Import every parsed record — skip AI categorization to stay within
+  // Vercel's 60s timeout. Categorization runs via /api/analyze-bank SSE.
   const accountWithConn = { ...account, connection };
   let created = 0;
   const errors: string[] = [];
   for (const record of parsed.transactions) {
     try {
-      const r = await importRecord(accountWithConn, record);
+      const r = await importRecord(accountWithConn, record, { skipAi: true });
       if (r.created) created += 1;
     } catch (err) {
       errors.push(`${record.externalId}: ${String(err)}`);

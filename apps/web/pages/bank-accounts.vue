@@ -370,6 +370,11 @@ const onCamtFile = async (e: Event): Promise<void> => {
 
     camtMessage.value = t("bank.syncedNew", { count: res.newTransactions });
     await refetchConnections();
+
+    // Auto-start AI categorization for the imported transactions
+    if (res.newTransactions > 0 && res.accountId) {
+      onAnalyze(res.accountId, false);
+    }
   } catch (err: any) {
     console.error("[CAMT Import]", err);
     const msg = err?.data?.statusMessage ?? err?.message ?? String(err);

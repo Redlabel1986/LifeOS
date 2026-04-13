@@ -164,7 +164,7 @@ const dateFmt = useDateFormat();
 
 type Period = "all" | "thisMonth" | "lastMonth" | "thisYear";
 
-const period = ref<Period>("thisMonth");
+const period = ref<Period>("thisYear");
 
 const periodOptions = computed(() => [
   { value: "thisMonth", label: t("transactions.thisMonth") },
