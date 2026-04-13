@@ -158,14 +158,15 @@ export const parseCamt053 = (xml: string): ParsedCamtStatement => {
     );
   }
 
-  const stmt = asArray(bkToCstmrStmt.Stmt)[0] as
-    | Record<string, unknown>
-    | undefined;
-  if (!stmt) {
+  const stmts = asArray(bkToCstmrStmt.Stmt) as Record<string, unknown>[];
+  if (stmts.length === 0) {
     throw new BankingError("Empty CAMT.053 (no Stmt)", "CAMT_EMPTY");
   }
 
-  const acctNode = stmt.Acct as
+  // Use the first statement for account info, but merge entries from ALL statements.
+  const firstStmt = stmts[0]!;
+
+  const acctNode = firstStmt.Acct as
     | { Id?: { IBAN?: string }; Ccy?: string; Nm?: string; Ownr?: { Nm?: string } }
     | undefined;
   const iban = acctNode?.Id?.IBAN ?? null;
@@ -173,8 +174,9 @@ export const parseCamt053 = (xml: string): ParsedCamtStatement => {
   const accountName = acctNode?.Nm ?? null;
   const ownerName = acctNode?.Ownr?.Nm ?? null;
 
-  // Closing balance — used as the account balance snapshot.
-  const balances = asArray(stmt.Bal as unknown);
+  // Closing balance — use the LAST statement's closing balance (most recent).
+  const lastStmt = stmts[stmts.length - 1]!;
+  const balances = asArray(lastStmt.Bal as unknown);
   const closing = balances.find((b) => {
     const cd =
       ((b as { Tp?: { CdOrPrtry?: { Cd?: string } } }).Tp?.CdOrPrtry?.Cd ?? "")
@@ -193,15 +195,16 @@ export const parseCamt053 = (xml: string): ParsedCamtStatement => {
     : null;
   const balanceAt = closing?.Dt ? parseDate(closing.Dt.Dt) : null;
 
+  // Date range spans all statements
   const fromDate = parseDate(
-    (stmt.FrToDt as { FrDtTm?: string } | undefined)?.FrDtTm,
+    (firstStmt.FrToDt as { FrDtTm?: string } | undefined)?.FrDtTm,
   );
   const toDate = parseDate(
-    (stmt.FrToDt as { ToDtTm?: string } | undefined)?.ToDtTm,
+    (lastStmt.FrToDt as { ToDtTm?: string } | undefined)?.ToDtTm,
   );
 
   const account: BankAccountInfo = {
-    externalId: iban ?? `camt-${(stmt.Id as string | undefined) ?? "unknown"}`,
+    externalId: iban ?? `camt-${(firstStmt.Id as string | undefined) ?? "unknown"}`,
     iban,
     bic: null,
     name: accountName,
@@ -211,64 +214,69 @@ export const parseCamt053 = (xml: string): ParsedCamtStatement => {
     balanceAt,
   };
 
-  const entries = asArray(stmt.Ntry as unknown) as CamtEntry[];
+  // Collect entries from ALL statements
   const transactions: BankTransactionRecord[] = [];
+  let globalIdx = 0;
 
-  entries.forEach((entry, idx) => {
-    const isCredit = entry.CdtDbtInd === "CRDT";
-    const amountMinor = toMinor(entry.Amt["#text"], isCredit);
-    const txCcy = entry.Amt["@_Ccy"] ?? currency;
-    const bookingDate = parseDate(entry.BookgDt?.Dt) ?? new Date();
-    const valueDate = parseDate(entry.ValDt?.Dt);
+  for (const stmt of stmts) {
+    const entries = asArray(stmt.Ntry as unknown) as CamtEntry[];
 
-    const detailsList = asArray(entry.NtryDtls);
-    const txDetailsList: CamtTxDetails[] = detailsList.flatMap((d) =>
-      asArray(d.TxDtls),
-    );
+    entries.forEach((entry) => {
+      const entryIdx = globalIdx++;
+      const isCredit = entry.CdtDbtInd === "CRDT";
+      const amountMinor = toMinor(entry.Amt["#text"], isCredit);
+      const txCcy = entry.Amt["@_Ccy"] ?? currency;
+      const bookingDate = parseDate(entry.BookgDt?.Dt) ?? new Date();
+      const valueDate = parseDate(entry.ValDt?.Dt);
 
-    if (txDetailsList.length === 0) {
-      // Single-leg entry without TxDtls breakdown.
-      transactions.push({
-        externalId: buildExternalId(entry, null, idx, bookingDate),
-        amountMinor,
-        currency: txCcy,
-        bookingDate,
-        valueDate,
-        remittanceInfo: null,
-        counterpartyName: null,
-        counterpartyIban: null,
-        endToEndId: null,
-        raw: entry,
-      });
-      return;
-    }
+      const detailsList = asArray(entry.NtryDtls);
+      const txDetailsList: CamtTxDetails[] = detailsList.flatMap((d) =>
+        asArray(d.TxDtls),
+      );
 
-    txDetailsList.forEach((txDetails, subIdx) => {
-      const txAmount = txDetails.Amt
-        ? toMinor(txDetails.Amt["#text"], isCredit)
-        : amountMinor;
-      const txCurrency = txDetails.Amt?.["@_Ccy"] ?? txCcy;
-      const counterparty = flattenCounterparty(txDetails, isCredit);
+      if (txDetailsList.length === 0) {
+        transactions.push({
+          externalId: buildExternalId(entry, null, entryIdx, bookingDate),
+          amountMinor,
+          currency: txCcy,
+          bookingDate,
+          valueDate,
+          remittanceInfo: null,
+          counterpartyName: null,
+          counterpartyIban: null,
+          endToEndId: null,
+          raw: entry,
+        });
+        return;
+      }
 
-      transactions.push({
-        externalId: buildExternalId(entry, txDetails, idx * 100 + subIdx, bookingDate),
-        amountMinor: txAmount,
-        currency: txCurrency,
-        bookingDate,
-        valueDate,
-        remittanceInfo: flattenRemittance(txDetails),
-        counterpartyName: counterparty.name,
-        counterpartyIban: counterparty.iban,
-        endToEndId: txDetails.Refs?.EndToEndId ?? null,
-        raw: { entry, txDetails },
+      txDetailsList.forEach((txDetails, subIdx) => {
+        const txAmount = txDetails.Amt
+          ? toMinor(txDetails.Amt["#text"], isCredit)
+          : amountMinor;
+        const txCurrency = txDetails.Amt?.["@_Ccy"] ?? txCcy;
+        const counterparty = flattenCounterparty(txDetails, isCredit);
+
+        transactions.push({
+          externalId: buildExternalId(entry, txDetails, entryIdx * 100 + subIdx, bookingDate),
+          amountMinor: txAmount,
+          currency: txCurrency,
+          bookingDate,
+          valueDate,
+          remittanceInfo: flattenRemittance(txDetails),
+          counterpartyName: counterparty.name,
+          counterpartyIban: counterparty.iban,
+          endToEndId: txDetails.Refs?.EndToEndId ?? null,
+          raw: { entry, txDetails },
+        });
       });
     });
-  });
+  }
 
   return {
     account,
     transactions,
-    statementId: (stmt.Id as string | undefined) ?? null,
+    statementId: (firstStmt.Id as string | undefined) ?? null,
     fromDate,
     toDate,
   };
