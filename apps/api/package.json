@@ -11,7 +11,8 @@
     "./context": "./src/context.ts",
     "./queue": "./src/queue.ts",
     "./auth/tokens": "./src/auth/tokens.ts",
-    "./services/document-processor": "./src/services/document-processor.ts"
+    "./services/document-processor": "./src/services/document-processor.ts",
+    "./services/bank-sync": "./src/services/bank-sync.ts"
   },
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/server.ts",
