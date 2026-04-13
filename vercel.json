@@ -1,6 +1,6 @@
 {
   "installCommand": "pnpm install --frozen-lockfile --prod=false",
-  "buildCommand": "bash scripts/vercel-build.sh",
+  "buildCommand": "cd apps/web && pnpm run build && cp -r .vercel/output ../../.vercel/output && node ../../scripts/patch-vercel.cjs",
   "outputDirectory": ".vercel/output",
   "framework": null
 }
