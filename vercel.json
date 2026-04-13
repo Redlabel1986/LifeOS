@@ -1,5 +1,5 @@
 {
   "installCommand": "npm i -g pnpm@9.5.0 && pnpm install --frozen-lockfile --prod=false",
-  "buildCommand": "pnpm run build --filter=@lifeos/web && mkdir -p .vercel && mv apps/web/.vercel/output .vercel/output",
+  "buildCommand": "cd packages/db && npx prisma generate && cd ../../apps/web && npx nuxt build && cd ../.. && mv apps/web/.vercel/output .vercel/output",
   "framework": null
 }
