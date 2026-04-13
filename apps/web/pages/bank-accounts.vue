@@ -169,7 +169,6 @@ import {
   CONFIRM_BANK_CONNECTION_MUTATION,
   CONNECT_BANK_MUTATION,
   DISCONNECT_BANK_MUTATION,
-  IMPORT_CAMT_FILE_MUTATION,
   SYNC_BANK_CONNECTION_MUTATION,
 } from "~/graphql/operations";
 
@@ -233,7 +232,6 @@ const { execute: connectBank } = useMutation(CONNECT_BANK_MUTATION);
 const { execute: confirmConnection } = useMutation(CONFIRM_BANK_CONNECTION_MUTATION);
 const { execute: syncConnection } = useMutation(SYNC_BANK_CONNECTION_MUTATION);
 const { execute: disconnectBank } = useMutation(DISCONNECT_BANK_MUTATION);
-const { execute: importCamt } = useMutation(IMPORT_CAMT_FILE_MUTATION);
 const { execute: analyzeAccount } = useMutation(ANALYZE_BANK_ACCOUNT_MUTATION);
 
 const analyzingAccountId = ref<string | null>(null);
@@ -292,18 +290,6 @@ const onDisconnect = async (id: string): Promise<void> => {
   await refetchConnections();
 };
 
-const fileToBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1] ?? "";
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-
 const onCamtFile = async (e: Event): Promise<void> => {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -311,34 +297,29 @@ const onCamtFile = async (e: Event): Promise<void> => {
   camtMessage.value = "";
   camtLoading.value = true;
   try {
-    const base64 = await fileToBase64(file);
-    if (!base64) {
-      camtMessage.value = "Fehler: Datei konnte nicht gelesen werden.";
-      return;
-    }
-    const result = await importCamt({
-      input: { fileBase64: base64, institutionName: file.name },
+    const form = new FormData();
+    form.append("file", file);
+    form.append("institutionName", file.name);
+
+    const authStore = useAuthStore();
+    const res = await $fetch<{
+      connectionId: string;
+      accountId: string;
+      newTransactions: number;
+      totalScanned: number;
+      errors: string[];
+    }>("/api/upload-camt", {
+      method: "POST",
+      body: form,
+      headers: { Authorization: `Bearer ${authStore.accessToken}` },
     });
-    if (result.error) {
-      console.error("[CAMT Import]", result.error);
-      const msg =
-        result.error.message ??
-        result.error.graphqlErrors?.[0]?.message ??
-        String(result.error);
-      camtMessage.value = `Fehler: ${msg}`;
-      return;
-    }
-    if (result.data?.importCamtFile) {
-      camtMessage.value = t("bank.syncedNew", {
-        count: result.data.importCamtFile.newTransactions,
-      });
-      await refetchConnections();
-    } else {
-      camtMessage.value = "Fehler: Keine Antwort vom Server erhalten.";
-    }
-  } catch (err) {
-    console.error("[CAMT Import] uncaught:", err);
-    camtMessage.value = `Fehler: ${err instanceof Error ? err.message : String(err)}`;
+
+    camtMessage.value = t("bank.syncedNew", { count: res.newTransactions });
+    await refetchConnections();
+  } catch (err: any) {
+    console.error("[CAMT Import]", err);
+    const msg = err?.data?.statusMessage ?? err?.message ?? String(err);
+    camtMessage.value = `Fehler: ${msg}`;
   } finally {
     camtLoading.value = false;
     input.value = "";
