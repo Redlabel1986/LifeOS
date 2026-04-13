@@ -6,7 +6,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build", "codegen"],
-      "outputs": ["dist/**", ".nuxt/**", ".output/**", "src/generated/**"]
+      "outputs": ["dist/**", ".nuxt/**", ".output/**", ".vercel/output/**", "src/generated/**"]
     },
     "codegen": {
       "inputs": ["schema.graphql", "codegen.yml", "**/*.graphql"],
