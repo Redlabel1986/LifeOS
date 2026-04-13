@@ -80,31 +80,38 @@
           >
             {{ t("bank.syncNow") }}
           </UiButton>
-          <UiButton
-            v-for="acc in conn.accounts"
-            :key="`analyze-${acc.id}`"
-            variant="secondary"
-            size="sm"
-            :loading="analyzingAccountId === acc.id"
-            @click="onAnalyze(acc.id, false)"
-          >
-            {{
-              analyzingAccountId === acc.id
-                ? t("bank.analyzing")
-                : t("bank.analyze")
-            }}
-          </UiButton>
-          <UiButton
-            v-for="acc in conn.accounts"
-            :key="`force-${acc.id}`"
-            variant="ghost"
-            size="sm"
-            :loading="analyzingAccountId === acc.id"
-            :title="t('bank.analyzeForceHint')"
-            @click="onAnalyze(acc.id, true)"
-          >
-            {{ t("bank.analyzeForce") }}
-          </UiButton>
+          <template v-for="acc in conn.accounts">
+            <div v-if="analyzingAccountId === acc.id" :key="`progress-${acc.id}`" class="analyze-progress">
+              <div class="analyze-progress__bar">
+                <div
+                  class="analyze-progress__fill"
+                  :style="{ width: `${analyzePercent}%` }"
+                />
+              </div>
+              <span class="analyze-progress__label">
+                {{ analyzePercent }}% ({{ analyzeUpdated }} {{ t("bank.updated") }})
+              </span>
+            </div>
+            <UiButton
+              v-else
+              :key="`analyze-${acc.id}`"
+              variant="secondary"
+              size="sm"
+              @click="onAnalyze(acc.id, false)"
+            >
+              {{ t("bank.analyze") }}
+            </UiButton>
+            <UiButton
+              v-if="analyzingAccountId !== acc.id"
+              :key="`force-${acc.id}`"
+              variant="ghost"
+              size="sm"
+              :title="t('bank.analyzeForceHint')"
+              @click="onAnalyze(acc.id, true)"
+            >
+              {{ t("bank.analyzeForce") }}
+            </UiButton>
+          </template>
           <UiButton
             variant="ghost"
             size="sm"
@@ -162,7 +169,6 @@
 <script setup lang="ts">
 import { useMutation, useQuery } from "villus";
 import {
-  ANALYZE_BANK_ACCOUNT_MUTATION,
   BANKING_CONFIGURED_QUERY,
   BANK_CONNECTIONS_QUERY,
   BANK_INSTITUTIONS_QUERY,
@@ -232,9 +238,9 @@ const { execute: connectBank } = useMutation(CONNECT_BANK_MUTATION);
 const { execute: confirmConnection } = useMutation(CONFIRM_BANK_CONNECTION_MUTATION);
 const { execute: syncConnection } = useMutation(SYNC_BANK_CONNECTION_MUTATION);
 const { execute: disconnectBank } = useMutation(DISCONNECT_BANK_MUTATION);
-const { execute: analyzeAccount } = useMutation(ANALYZE_BANK_ACCOUNT_MUTATION);
-
 const analyzingAccountId = ref<string | null>(null);
+const analyzePercent = ref(0);
+const analyzeUpdated = ref(0);
 const analyzeMessage = ref("");
 
 const onAnalyze = async (
@@ -242,14 +248,60 @@ const onAnalyze = async (
   force = false,
 ): Promise<void> => {
   analyzingAccountId.value = accountId;
+  analyzePercent.value = 0;
+  analyzeUpdated.value = 0;
   analyzeMessage.value = "";
+
   try {
-    const { error } = await analyzeAccount({ accountId, force });
-    if (error) {
-      analyzeMessage.value = error.message;
+    const authStore = useAuthStore();
+    const response = await fetch("/api/analyze-bank", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authStore.accessToken}`,
+      },
+      body: JSON.stringify({ accountId, force }),
+    });
+
+    if (!response.ok || !response.body) {
+      analyzeMessage.value = `Fehler: ${response.statusText}`;
       return;
     }
-    analyzeMessage.value = t("bank.analyzeQueued");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const msg = JSON.parse(line.slice(6));
+          if (msg.type === "progress") {
+            analyzePercent.value = msg.percent;
+            analyzeUpdated.value = msg.updated;
+          } else if (msg.type === "done") {
+            analyzeMessage.value = t("bank.analyzeResult", {
+              analyzed: msg.analyzed,
+              updated: msg.updated,
+            });
+          } else if (msg.type === "error") {
+            analyzeMessage.value = `Fehler: ${msg.message}`;
+          }
+        } catch { /* skip malformed lines */ }
+      }
+    }
+
+    await refetchConnections();
+  } catch (err: any) {
+    analyzeMessage.value = `Fehler: ${err?.message ?? String(err)}`;
   } finally {
     analyzingAccountId.value = null;
   }
@@ -577,6 +629,35 @@ onMounted(async () => {
     inset: 0;
     opacity: 0;
     cursor: pointer;
+  }
+}
+
+.analyze-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 200px;
+
+  &__bar {
+    flex: 1;
+    height: 6px;
+    background: var(--surface-alt);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    background: var(--brand-500);
+    border-radius: var(--radius-pill);
+    transition: width 0.3s ease;
+  }
+
+  &__label {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
   }
 }
 </style>

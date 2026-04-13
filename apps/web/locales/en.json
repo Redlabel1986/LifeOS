@@ -44,7 +44,8 @@
     "analyzeResult": "Re-categorized {updated} of {analyzed} transactions",
     "analyzeForce": "Re-analyze all",
     "analyzeQueued": "Analysis started — transactions are being categorized in the background.",
-    "analyzeForceHint": "Re-runs analysis on already-categorized transactions (except manually-set ones)"
+    "analyzeForceHint": "Re-runs analysis on already-categorized transactions (except manually-set ones)",
+    "updated": "updated"
   },
   "auth": {
     "signIn": "Sign in",

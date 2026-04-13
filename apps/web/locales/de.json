@@ -44,7 +44,8 @@
     "analyzeResult": "{updated} von {analyzed} Transaktionen neu zugeordnet",
     "analyzeForce": "Alles neu analysieren",
     "analyzeQueued": "Analyse gestartet — Transaktionen werden im Hintergrund kategorisiert.",
-    "analyzeForceHint": "Analysiert auch bereits kategorisierte Transaktionen neu (außer manuell gesetzte)"
+    "analyzeForceHint": "Analysiert auch bereits kategorisierte Transaktionen neu (außer manuell gesetzte)",
+    "updated": "aktualisiert"
   },
   "auth": {
     "signIn": "Anmelden",

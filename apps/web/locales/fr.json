@@ -44,7 +44,8 @@
     "analyzeResult": "{updated} sur {analyzed} transactions re-catégorisées",
     "analyzeForce": "Tout ré-analyser",
     "analyzeQueued": "Analyse lancée — les transactions sont catégorisées en arrière-plan.",
-    "analyzeForceHint": "Ré-analyse aussi les transactions déjà catégorisées (sauf celles définies manuellement)"
+    "analyzeForceHint": "Ré-analyse aussi les transactions déjà catégorisées (sauf celles définies manuellement)",
+    "updated": "mis à jour"
   },
   "auth": {
     "signIn": "Se connecter",
