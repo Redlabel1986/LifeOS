@@ -69,6 +69,7 @@ export default defineNuxtConfig({
   css: ["~/assets/scss/main.scss"],
 
   nitro: {
+    vercel: { config: { maxDuration: 60 } },
     // Inline workspace TS packages but keep native/CJS deps external
     externals: {
       inline: [
