@@ -11,6 +11,7 @@
 import { prisma, DocumentStatus, DocumentType } from "@lifeos/db";
 import { writeFile } from "@lifeos/storage";
 import { verifyAccessToken } from "@lifeos/api/auth/tokens";
+import { processDocument } from "@lifeos/api/services/document-processor";
 
 const VALID_TYPES = new Set(Object.values(DocumentType));
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MiB
@@ -83,7 +84,7 @@ export default defineEventHandler(async (event) => {
     data: {
       userId: user.id,
       type: docType,
-      status: DocumentStatus.UPLOADED,
+      status: DocumentStatus.PROCESSING,
       storageKey: written.storageKey,
       storageBucket: written.storageKey.startsWith("blob://")
         ? "vercel-blob"
@@ -94,5 +95,20 @@ export default defineEventHandler(async (event) => {
     },
   });
 
-  return { documentId: doc.id, status: doc.status };
+  // ---- Synchronous processing (OCR + AI) -----------------------------------
+  // On Vercel serverless, setImmediate()/background tasks are killed after
+  // response is sent. We must run processing before returning.
+  try {
+    await processDocument(doc.id);
+  } catch (err) {
+    // processDocument updates the row to FAILED internally on error;
+    // we still return a success for the upload itself.
+    console.error("processDocument failed", err);
+  }
+
+  const finalDoc = await prisma.document.findUnique({ where: { id: doc.id } });
+  return {
+    documentId: doc.id,
+    status: finalDoc?.status ?? doc.status,
+  };
 });
