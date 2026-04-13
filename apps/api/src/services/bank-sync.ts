@@ -421,17 +421,117 @@ export const importCamtFile = async (input: {
     });
   }
 
-  // Import every parsed record — skip AI categorization to stay within
-  // Vercel's 60s timeout. Categorization runs via /api/analyze-bank SSE.
-  const accountWithConn = { ...account, connection };
+  // ---- BULK IMPORT — optimized to fit within Vercel's 60s timeout ----------
+  // Strategy:
+  //   1. Sort newest-first so partial timeouts still preserve recent data
+  //   2. Single dedup query for all existing externalIds
+  //   3. Pre-load merchants once (already cached)
+  //   4. Insert in parallel batches via Promise.all
+
+  // Sort by booking date DESC (newest first)
+  const sortedRecords = [...parsed.transactions].sort(
+    (a, b) => b.bookingDate.getTime() - a.bookingDate.getTime(),
+  );
+
+  // Bulk dedup: fetch all existing externalIds in ONE query
+  const allExternalIds = sortedRecords.map((r) => r.externalId);
+  const existing = await prisma.bankTransaction.findMany({
+    where: { accountId: account.id, externalId: { in: allExternalIds } },
+    select: { externalId: true },
+  });
+  const existingSet = new Set(existing.map((e) => e.externalId));
+  const newRecords = sortedRecords.filter((r) => !existingSet.has(r.externalId));
+
+  // Pre-load merchants once
+  const merchants = await getMerchants();
+  // Pre-load system categories for merchant fallback
+  const systemCategories = await prisma.category.findMany({
+    where: { isSystem: true },
+    select: { id: true, slug: true },
+  });
+  const categoryBySlug = new Map(systemCategories.map((c) => [c.slug, c.id]));
+
+  // Build all rows in memory (no DB calls)
+  const transactionData = newRecords.map((record) => {
+    const haystack = [record.counterpartyName, record.remittanceInfo]
+      .filter(Boolean)
+      .join(" ");
+    const merchant = haystack ? matchMerchant(haystack, merchants) : null;
+    const categoryId =
+      merchant?.defaultCategorySlug
+        ? categoryBySlug.get(merchant.defaultCategorySlug) ?? null
+        : null;
+
+    const isExpense = record.amountMinor < 0n;
+    const amountAbs = isExpense ? -record.amountMinor : record.amountMinor;
+
+    return {
+      record,
+      merchant,
+      categoryId,
+      isExpense,
+      amountAbs,
+    };
+  });
+
+  // Insert in parallel batches of 25 (avoids overwhelming Postgres)
+  const BATCH_SIZE = 25;
   let created = 0;
   const errors: string[] = [];
-  for (const record of parsed.transactions) {
-    try {
-      const r = await importRecord(accountWithConn, record, { skipAi: true });
-      if (r.created) created += 1;
-    } catch (err) {
-      errors.push(`${record.externalId}: ${String(err)}`);
+
+  for (let i = 0; i < transactionData.length; i += BATCH_SIZE) {
+    const batch = transactionData.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async ({ record, merchant, categoryId, isExpense, amountAbs }) => {
+        await prisma.$transaction(async (tx) => {
+          const lifeosTx = await tx.transaction.create({
+            data: {
+              userId: input.userId,
+              type: isExpense ? TransactionType.EXPENSE : TransactionType.INCOME,
+              source: TransactionSource.BANK_IMPORT,
+              amountMinor: amountAbs,
+              currency: record.currency,
+              occurredAt: record.bookingDate,
+              bookedAt: record.bookingDate,
+              description:
+                record.counterpartyName ??
+                record.remittanceInfo?.slice(0, 120) ??
+                null,
+              note: record.remittanceInfo,
+              categoryId,
+              merchantId: merchant?.id ?? null,
+              aiConfidence: categoryId ? 1.0 : null,
+              needsReview: !categoryId,
+            },
+          });
+
+          await tx.bankTransaction.create({
+            data: {
+              accountId: account.id,
+              externalId: record.externalId,
+              amountMinor: record.amountMinor,
+              currency: record.currency,
+              bookingDate: record.bookingDate,
+              valueDate: record.valueDate,
+              remittanceInfo: record.remittanceInfo,
+              counterpartyName: record.counterpartyName,
+              counterpartyIban: record.counterpartyIban,
+              endToEndId: record.endToEndId,
+              raw: record.raw as Prisma.InputJsonValue,
+              lifeosTransactionId: lifeosTx.id,
+            },
+          });
+        });
+      }),
+    );
+
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j]!;
+      if (r.status === "fulfilled") {
+        created++;
+      } else {
+        errors.push(`${batch[j]!.record.externalId}: ${String(r.reason)}`);
+      }
     }
   }
 
