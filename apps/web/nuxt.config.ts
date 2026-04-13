@@ -69,7 +69,6 @@ export default defineNuxtConfig({
   css: ["~/assets/scss/main.scss"],
 
   nitro: {
-    preset: "vercel",
     // Inline workspace TS packages but keep native/CJS deps external
     externals: {
       inline: [
