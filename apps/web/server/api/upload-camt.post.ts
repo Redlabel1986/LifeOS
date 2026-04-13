@@ -18,29 +18,52 @@ function isZip(buf: Buffer): boolean {
   return buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04;
 }
 
+/**
+ * Extracts the first .xml file from a ZIP archive using the Central Directory
+ * (reliable even when local file headers have zeroed sizes due to data
+ * descriptors / bit 3 of the general purpose flag).
+ */
 function extractXmlFromZip(zip: Buffer): Buffer {
-  let offset = 0;
+  // 1. Find End of Central Directory record (EOCD) — scan backwards for 0x06054b50
+  let eocdOffset = -1;
+  for (let i = zip.length - 22; i >= 0; i--) {
+    if (zip.readUInt32LE(i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset === -1) throw new Error("Invalid ZIP: no End of Central Directory found");
 
-  while (offset + 30 <= zip.length) {
-    // Local file header signature
-    if (zip.readUInt32LE(offset) !== 0x04034b50) break;
+  // 2. Read Central Directory offset and entry count from EOCD
+  const cdEntries = zip.readUInt16LE(eocdOffset + 10);
+  const cdOffset = zip.readUInt32LE(eocdOffset + 16);
 
-    const method = zip.readUInt16LE(offset + 8);
-    const compressedSize = zip.readUInt32LE(offset + 18);
-    const uncompressedSize = zip.readUInt32LE(offset + 22);
-    const nameLen = zip.readUInt16LE(offset + 26);
-    const extraLen = zip.readUInt16LE(offset + 28);
-    const fileName = zip.subarray(offset + 30, offset + 30 + nameLen).toString("utf-8");
-    const dataStart = offset + 30 + nameLen + extraLen;
+  // 3. Walk Central Directory entries (signature 0x02014b50)
+  let pos = cdOffset;
+  for (let i = 0; i < cdEntries && pos + 46 <= zip.length; i++) {
+    if (zip.readUInt32LE(pos) !== 0x02014b50) break;
+
+    const method = zip.readUInt16LE(pos + 10);
+    const compressedSize = zip.readUInt32LE(pos + 20);
+    const nameLen = zip.readUInt16LE(pos + 28);
+    const extraLen = zip.readUInt16LE(pos + 30);
+    const commentLen = zip.readUInt16LE(pos + 32);
+    const localHeaderOffset = zip.readUInt32LE(pos + 42);
+    const fileName = zip.subarray(pos + 46, pos + 46 + nameLen).toString("utf-8");
 
     if (fileName.toLowerCase().endsWith(".xml")) {
+      // 4. Jump to local file header to find where the data actually starts
+      const localNameLen = zip.readUInt16LE(localHeaderOffset + 26);
+      const localExtraLen = zip.readUInt16LE(localHeaderOffset + 28);
+      const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
       const raw = zip.subarray(dataStart, dataStart + compressedSize);
-      if (method === 0) return raw; // stored
+
+      if (method === 0) return raw; // stored (uncompressed)
       if (method === 8) return inflateRawSync(raw); // deflate
       throw new Error(`Unsupported ZIP compression method ${method} for ${fileName}`);
     }
 
-    offset = dataStart + compressedSize;
+    pos += 46 + nameLen + extraLen + commentLen;
   }
 
   throw new Error("No .xml file found inside the ZIP archive");
