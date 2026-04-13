@@ -5,6 +5,7 @@
 // body-size limit (Vercel 4.5 MB cap on serverless request bodies).
 // ============================================================================
 
+import { gunzipSync } from "node:zlib";
 import { verifyAccessToken } from "@lifeos/api/auth/tokens";
 import { importCamtFile } from "@lifeos/api/services/bank-sync";
 
@@ -30,6 +31,7 @@ export default defineEventHandler(async (event) => {
 
   let xmlBuffer: Buffer | null = null;
   let institutionName = "";
+  let encoding = "";
 
   for (const part of formData) {
     if (part.name === "file" && part.data) {
@@ -38,10 +40,18 @@ export default defineEventHandler(async (event) => {
     if (part.name === "institutionName" && part.data) {
       institutionName = part.data.toString("utf-8");
     }
+    if (part.name === "encoding" && part.data) {
+      encoding = part.data.toString("utf-8");
+    }
   }
 
   if (!xmlBuffer || xmlBuffer.length === 0) {
     throw createError({ statusCode: 400, statusMessage: "No file provided" });
+  }
+
+  // ---- Decompress if gzipped -----------------------------------------------
+  if (encoding === "gzip") {
+    xmlBuffer = gunzipSync(xmlBuffer);
   }
 
   // ---- Import --------------------------------------------------------------

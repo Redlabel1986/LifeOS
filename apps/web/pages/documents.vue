@@ -97,8 +97,10 @@ const onFile = async (e: Event): Promise<void> => {
   if (!file) return;
   uploading.value = true;
   try {
+    const compressed = await gzipBlob(file);
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", compressed, file.name);
+    formData.append("encoding", "gzip");
     formData.append("type", uploadType.value);
 
     const res = await $fetch("/api/upload-document", {

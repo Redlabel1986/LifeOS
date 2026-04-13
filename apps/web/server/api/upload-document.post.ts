@@ -8,6 +8,7 @@
 // on Vercel serverless (4.5 MB cap).
 // ============================================================================
 
+import { gunzipSync } from "node:zlib";
 import { prisma, DocumentStatus, DocumentType } from "@lifeos/db";
 import { writeFile } from "@lifeos/storage";
 import { verifyAccessToken } from "@lifeos/api/auth/tokens";
@@ -48,6 +49,7 @@ export default defineEventHandler(async (event) => {
   let mimeType = "application/octet-stream";
   let originalName = "upload";
   let docType: DocumentType = DocumentType.OTHER;
+  let encoding = "";
 
   for (const part of formData) {
     if (part.name === "file" && part.data) {
@@ -61,10 +63,17 @@ export default defineEventHandler(async (event) => {
         docType = val as DocumentType;
       }
     }
+    if (part.name === "encoding" && part.data) {
+      encoding = part.data.toString("utf-8");
+    }
   }
 
   if (!fileBuffer || fileBuffer.length === 0) {
     throw createError({ statusCode: 400, statusMessage: "No file provided" });
+  }
+
+  if (encoding === "gzip") {
+    fileBuffer = gunzipSync(fileBuffer);
   }
 
   if (fileBuffer.length > MAX_SIZE) {

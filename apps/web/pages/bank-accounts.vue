@@ -297,8 +297,10 @@ const onCamtFile = async (e: Event): Promise<void> => {
   camtMessage.value = "";
   camtLoading.value = true;
   try {
+    const compressed = await gzipBlob(file);
     const form = new FormData();
-    form.append("file", file);
+    form.append("file", compressed, file.name);
+    form.append("encoding", "gzip");
     form.append("institutionName", file.name);
 
     const authStore = useAuthStore();
