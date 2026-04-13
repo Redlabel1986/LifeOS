@@ -145,7 +145,7 @@
       <UiCard :title="t('bank.uploadCamt')" class="modal__body">
         <p class="modal__hint">{{ t("bank.camtHint") }}</p>
         <label class="camt-drop">
-          <input type="file" accept=".xml,.zip" @change="onCamtFile" />
+          <input type="file" accept=".xml,.zip,application/xml,text/xml,application/zip" @change="onCamtFile" />
           <span>{{ camtLoading ? t("common.loading") : t("documents.dragDrop") }}</span>
         </label>
         <p v-if="camtMessage" :class="['modal__message', camtMessage.includes('Fehler') || camtMessage.includes('failed') || camtMessage.includes('Invalid') ? 'modal__message--error' : '']">
